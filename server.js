@@ -4,12 +4,24 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const session = require('express-session');
+const fs = require('fs');
 
 const connectDB = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
+const { startMonthlyReset } = require('./services/subscriptionResetService');
+
+// ── Environment validation ──
+const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'CLAUDE_API_KEY',
+];
+
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0 && process.env.NODE_ENV === 'production') {
+  console.error('❌ Missing required environment variables:', missingVars.join(', '));
+  process.exit(1);
+}
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -26,6 +38,9 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
+// Start monthly token-reset cron job
+startMonthlyReset();
+
 // Middleware
 app.use(helmet());
 app.use(compression());
@@ -34,116 +49,64 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+// Tiered rate limiting
+const makeLimit = (max, windowMs = 15 * 60 * 1000) => rateLimit({
+  windowMs,
+  max,
+  keyGenerator: (req) => req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
-app.use(limiter);
 
-// Increase limit to 10mb to accommodate base64-encoded image payloads
-// The verify callback captures the raw body buffer needed for Lemon Squeezy webhook HMAC verification
+// Auth: tight limit to prevent brute-force / credential stuffing
+const authLimiter = makeLimit(20);
+// AI routes: moderate limit (token budget already enforced per-user)
+const aiLimiter = makeLimit(60);
+// General API: comfortable for normal usage
+const generalLimiter = makeLimit(200);
+
+// Increase limit to 10mb
 app.use(express.json({
   limit: '10mb',
   verify: (req, res, buf) => { req.rawBody = buf; },
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Session configuration for Passport
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your_session_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true }
-}));
-
-// Passport initialization
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Passport Google Strategy
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL
-}, async (accessToken, refreshToken, profile, done) => {
-  try {
-    const User = require('./models/User');
-    const Subscription = require('./models/Subscription');
-    const Usage = require('./models/Usage');
-
-    let user = await User.findOne({ googleId: profile.id });
-
-    if (!user) {
-      user = new User({
-        googleId: profile.id,
-        name: profile.displayName,
-        email: profile.emails[0].value,
-        avatar: profile.photos[0]?.value,
-      });
-
-      await user.save();
-
-      const subscription = new Subscription({
-        userId: user._id,
-        plan: 'free',
-        tokenLimit: 10000,
-        features: ['docQA', 'summaryGeneration'],
-      });
-
-      await subscription.save();
-
-      const usage = new Usage({
-        userId: user._id,
-        tokenLimit: 10000,
-      });
-
-      await usage.save();
-
-      user.subscription = subscription._id;
-      user.usage = usage._id;
-      await user.save();
-    }
-
-    return done(null, user);
-  } catch (error) {
-    return done(error, null);
-  }
-}));
-
-passport.serializeUser((user, done) => {
-  done(null, user.id);
-});
-
-passport.deserializeUser(async (id, done) => {
-  try {
-    const User = require('./models/User');
-    const user = await User.findById(id);
-    done(null, user);
-  } catch (error) {
-    done(error, null);
-  }
-});
-
 // Create uploads directory if not exists
-const fs = require('fs');
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
+  console.log('📁 Created uploads directory');
 }
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/flashcards', flashcardRoutes);
-app.use('/api/quiz', quizRoutes);
-app.use('/api/mcq', mcqRoutes);
-app.use('/api/subscription', subscriptionRoutes);
-app.use('/api/assignments', assignmentRoutes);
+// API Routes (with tiered rate limits)
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/documents', aiLimiter, documentRoutes);
+app.use('/api/chat', aiLimiter, chatRoutes);
+app.use('/api/flashcards', aiLimiter, flashcardRoutes);
+app.use('/api/quiz', aiLimiter, quizRoutes);
+app.use('/api/mcq', aiLimiter, mcqRoutes);
+app.use('/api/subscription', generalLimiter, subscriptionRoutes);
+app.use('/api/assignments', aiLimiter, assignmentRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date() });
+// Health check with DB verification
+app.get('/health', async (req, res) => {
+  try {
+    const { connection } = require('mongoose');
+    const isConnected = connection.readyState === 1;
+    
+    res.status(isConnected ? 200 : 503).json({ 
+      status: isConnected ? 'OK' : 'DB_DISCONNECTED',
+      database: isConnected ? 'connected' : 'disconnected',
+      timestamp: new Date(),
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'ERROR',
+      error: error.message,
+      timestamp: new Date()
+    });
+  }
 });
 
 // 404 handler
@@ -155,9 +118,26 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+const server = app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('📛 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('📛 SIGINT received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = app;

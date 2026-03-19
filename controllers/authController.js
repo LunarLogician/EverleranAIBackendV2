@@ -217,6 +217,29 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Ensure Usage record exists (fallback for users who didn't get one during registration)
+    let usage = await Usage.findOne({ userId: user._id });
+    if (!usage) {
+      usage = new Usage({ 
+        userId: user._id, 
+        tokenLimit: 200 
+      });
+      await usage.save();
+      console.log(`📊 Created missing Usage record for user: ${email}`);
+    }
+
+    // Ensure Subscription exists if missing
+    let subscription = await Subscription.findOne({ userId: user._id });
+    if (!subscription) {
+      subscription = new Subscription({
+        userId: user._id,
+        plan: 'free',
+        tokenLimit: 200,
+      });
+      await subscription.save();
+      console.log(`📋 Created missing Subscription record for user: ${email}`);
+    }
+
     console.log(`✅ Login successful for user: ${email}`);
     const token = generateToken(user._id);
 
@@ -286,10 +309,16 @@ exports.googleAuthCallback = async (req, res, next) => {
 exports.getCurrentUser = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).populate('subscription');
+    const usage = await Usage.findOne({ userId: req.user._id });
 
     res.status(200).json({
       success: true,
       user,
+      usage: {
+        totalTokens: usage?.totalTokens || 0,
+        tokenLimit: usage?.tokenLimit || 200,
+        remainingTokens: (usage?.tokenLimit || 200) - (usage?.totalTokens || 0),
+      },
     });
   } catch (error) {
     next(error);
