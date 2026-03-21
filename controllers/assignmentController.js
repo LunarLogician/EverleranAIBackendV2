@@ -1,6 +1,7 @@
 const Assignment = require('../models/Assignment');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
+const { MAX_MESSAGE_LEN } = require('../validators/schemas');
 
 // ─────────────────────────────────────────────
 // ENDPOINT 1: Generate humanized assignment
@@ -21,6 +22,9 @@ exports.generateAssignment = async (req, res, next) => {
         success: false,
         message: 'message is required',
       });
+    }
+    if (message.length > MAX_MESSAGE_LEN) {
+      return res.status(400).json({ success: false, message: `message must be ${MAX_MESSAGE_LEN} characters or fewer` });
     }
 
     let fileContext = '';
@@ -118,6 +122,12 @@ exports.rewriteAssignment = async (req, res, next) => {
         success: false,
         message: 'studentName and enrollmentId are required',
       });
+    }
+    if (studentName.length > 100) {
+      return res.status(400).json({ success: false, message: 'studentName must be 100 characters or fewer' });
+    }
+    if (enrollmentId.length > 50) {
+      return res.status(400).json({ success: false, message: 'enrollmentId must be 50 characters or fewer' });
     }
 
     try {

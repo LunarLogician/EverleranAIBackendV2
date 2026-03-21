@@ -14,7 +14,29 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
+  'application/msword',                                                        // doc
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
+  'image/jpeg',
+  'image/png',
+  'text/plain',
+];
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      const err = new Error('Unsupported file type. Please upload PDF, DOCX, PPTX, JPG, PNG, or TXT.');
+      err.status = 400;
+      cb(err, false);
+    }
+  },
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+});
 
 const requirePlan = require('../middleware/requirePlan');
 

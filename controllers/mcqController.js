@@ -2,6 +2,7 @@ const MCQ = require('../models/MCQ');
 const Document = require('../models/Document');
 const { generateMCQsFromText } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_SOURCE_TEXT_LEN } = require('../validators/schemas');
 
 // ── Helper: normalize correctAnswer to letter (A/B/C/D) ──
 const getCorrectLabel = (q) => {
@@ -18,11 +19,15 @@ const getCorrectLabel = (q) => {
 // Generate MCQs from source text
 exports.generateMCQs = async (req, res, next) => {
   try {
-    const { sourceText, title, numQuestions = 5 } = req.body;
+    const { sourceText, title, numQuestions: _rawQ = 5 } = req.body;
     const userId = req.user._id;
+    const numQuestions = Math.min(Math.max(parseInt(_rawQ, 10) || 5, MIN_GENERATED), MAX_GENERATED);
 
     if (!sourceText) {
       return res.status(400).json({ message: 'Source text is required' });
+    }
+    if (sourceText.length > MAX_SOURCE_TEXT_LEN) {
+      return res.status(400).json({ message: `sourceText must be ${MAX_SOURCE_TEXT_LEN} characters or fewer` });
     }
 
     console.log('🎯 Generating MCQs...', { numQuestions });
@@ -63,8 +68,13 @@ exports.generateMCQs = async (req, res, next) => {
 // Generate MCQs from document
 exports.generateMCQsFromDocument = async (req, res, next) => {
   try {
-    const { documentId, numQuestions = 5, title } = req.body;
+    const { documentId, numQuestions: _rawQ = 5, title } = req.body;
     const userId = req.user._id;
+    const numQuestions = Math.min(Math.max(parseInt(_rawQ, 10) || 5, MIN_GENERATED), MAX_GENERATED);
+
+    if (!documentId || !isValidObjectId(documentId)) {
+      return res.status(400).json({ message: 'Valid documentId is required' });
+    }
 
     const document = await Document.findById(documentId);
     if (!document || document.userId.toString() !== userId.toString()) {

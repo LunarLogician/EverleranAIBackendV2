@@ -3,13 +3,19 @@ const Document = require('../models/Document');
 const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, VALID_DIFFICULTIES, MAX_TOPIC_LEN } = require('../validators/schemas');
 
 // Generate flashcards
 exports.generateFlashcards = async (req, res, next) => {
   try {
-    const { documentId, numberOfCards = 20 } = req.body;
+    const { documentId, numberOfCards: _rawCards = 20 } = req.body;
     let { setTitle } = req.body;
     const userId = req.user._id;
+    const numberOfCards = Math.min(Math.max(parseInt(_rawCards, 10) || 20, MIN_GENERATED), MAX_GENERATED);
+
+    if (!documentId || !isValidObjectId(documentId)) {
+      return res.status(400).json({ message: 'Valid documentId is required' });
+    }
 
     const document = await Document.findById(documentId);
     if (!document || document.userId.toString() !== userId.toString()) {
@@ -176,11 +182,18 @@ exports.updateFlashcardProgress = async (req, res, next) => {
 // Generate flashcards from topic/text (no document required)
 exports.generateFlashcardsFromText = async (req, res, next) => {
   try {
-    const { topic, numberOfCards = 10, difficulty = 'intermediate', setTitle } = req.body;
+    const { topic, numberOfCards: _rawCards = 10, difficulty = 'intermediate', setTitle } = req.body;
     const userId = req.user._id;
+    const numberOfCards = Math.min(Math.max(parseInt(_rawCards, 10) || 10, MIN_GENERATED), MAX_GENERATED);
 
     if (!topic) {
       return res.status(400).json({ success: false, message: 'topic is required' });
+    }
+    if (topic.length > MAX_TOPIC_LEN) {
+      return res.status(400).json({ success: false, message: `topic must be ${MAX_TOPIC_LEN} characters or fewer` });
+    }
+    if (!VALID_DIFFICULTIES.includes(difficulty)) {
+      return res.status(400).json({ success: false, message: 'difficulty must be easy, intermediate, or hard' });
     }
 
     const prompt = `Generate exactly ${numberOfCards} concise flashcards about "${topic}".
@@ -254,12 +267,16 @@ Return ONLY a valid JSON array with this structure (no extra text before or afte
 // Generate flashcards from uploaded file
 exports.generateFlashcardsFromFile = async (req, res, next) => {
   try {
-    const { numberOfCards = 10, difficulty = 'intermediate' } = req.body;
+    const { numberOfCards: _rawCards = 10, difficulty = 'intermediate' } = req.body;
     const userId = req.user._id;
+    const numberOfCards = Math.min(Math.max(parseInt(_rawCards, 10) || 10, MIN_GENERATED), MAX_GENERATED);
     const file = req.file;
 
     if (!file) {
       return res.status(400).json({ success: false, message: 'Please upload a file (PDF, DOCX, DOC, or PPTX)' });
+    }
+    if (!VALID_DIFFICULTIES.includes(difficulty)) {
+      return res.status(400).json({ success: false, message: 'difficulty must be easy, intermediate, or hard' });
     }
 
     let fileContent = '';

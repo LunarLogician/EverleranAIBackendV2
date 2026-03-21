@@ -4,6 +4,7 @@ const Document = require('../models/Document');
 const Usage = require('../models/Usage');
 const Subscription = require('../models/Subscription');
 const { callClaude } = require('../services/claudeService');
+const { isValidObjectId, MAX_MESSAGE_LEN } = require('../validators/schemas');
 
 // Direct chat - with or without document (flexible mode)
 exports.directChat = async (req, res, next) => {
@@ -21,6 +22,9 @@ exports.directChat = async (req, res, next) => {
     if ((!message || message.trim() === '') && !image) {
       console.log('   ❌ 400: Message or image is required');
       return res.status(400).json({ message: 'Message or image is required' });
+    }
+    if (message && message.length > MAX_MESSAGE_LEN) {
+      return res.status(400).json({ message: `Message must be ${MAX_MESSAGE_LEN} characters or fewer` });
     }
 
     // Parse image if provided — extract media type and raw base64 data
@@ -47,6 +51,10 @@ exports.directChat = async (req, res, next) => {
       }
       return text;
     };
+
+    if (documentId && !isValidObjectId(documentId)) {
+      return res.status(400).json({ message: 'Invalid documentId format' });
+    }
 
     let claudeMessages;
     let featureName = 'genericChat';  // Default feature tracking

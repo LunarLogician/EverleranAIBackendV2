@@ -3,6 +3,7 @@ const Document = require('../models/Document');
 const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED } = require('../validators/schemas');
 
 // Shuffle options and update correctAnswer index so the correct answer
 // is not always in the same position (Claude tends to put it at index 0).
@@ -42,8 +43,13 @@ function shuffleOptions(questions) {
 // Generate quiz
 exports.generateQuiz = async (req, res, next) => {
   try {
-    const { documentId, quizTitle, numberOfQuestions = 10 } = req.body;
+    const { documentId, quizTitle, numberOfQuestions: _rawQ = 10 } = req.body;
     const userId = req.user._id;
+    const numberOfQuestions = Math.min(Math.max(parseInt(_rawQ, 10) || 10, MIN_GENERATED), MAX_GENERATED);
+
+    if (!documentId || !isValidObjectId(documentId)) {
+      return res.status(400).json({ message: 'Valid documentId is required' });
+    }
 
     const document = await Document.findById(documentId);
     if (!document || document.userId.toString() !== userId.toString()) {
