@@ -1,7 +1,8 @@
 const Assignment = require('../models/Assignment');
+const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
-const { MAX_MESSAGE_LEN } = require('../validators/schemas');
+const { MAX_MESSAGE_LEN, MAX_DOC_CONTEXT } = require('../validators/schemas');
 
 // ─────────────────────────────────────────────
 // ENDPOINT 1: Generate humanized assignment
@@ -35,7 +36,7 @@ exports.generateAssignment = async (req, res, next) => {
         fileContext = `
 The student also attached a document. Use it as source material:
 """
-${text}
+${text.substring(0, MAX_DOC_CONTEXT)}
 """`;
       } catch (extractError) {
         console.warn(`⚠️  File extraction warning: ${extractError.message}`);
@@ -74,6 +75,17 @@ FORMATTING:
 
 Just write the assignment directly - no intro like "Here's your assignment" or "This is about..."
 Make it sound like YOU wrote it, not like an AI wrote it.`;
+
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
 
     const messages = [{ role: 'user', content: prompt }];
     const response = await callClaude(messages, 'assignment_generate', 2048);
@@ -150,7 +162,7 @@ Enrollment: ${enrollmentId}
 
 Original assignment to rewrite:
 """
-${originalContent}
+${originalContent.substring(0, MAX_DOC_CONTEXT)}
 """
 
 Rewriting rules:
@@ -177,6 +189,17 @@ Rewriting rules:
 6. KEEP IT SIMILAR - Same length, same number of paragraphs, same general structure as the original
 
 Just output the rewritten assignment - no intro or explanation. Make it sound like ${studentName} wrote it naturally.`;
+
+      // Token limit gate — check BEFORE calling Claude
+      const usagePreflight = await Usage.findOne({ userId });
+      if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+        return res.status(429).json({
+          message: 'You have reached your token limit. Upgrade your plan to continue.',
+          upgradeRequired: true,
+          tokenCount: usagePreflight.totalTokens,
+          tokenLimit: usagePreflight.tokenLimit,
+        });
+      }
 
       const messages = [{ role: 'user', content: prompt }];
       const response = await callClaude(messages, 'assignment_rewrite', 3000);

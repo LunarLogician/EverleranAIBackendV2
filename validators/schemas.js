@@ -6,6 +6,7 @@ const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 const MAX_MESSAGE_LEN    = 10_000;   // chat message / assignment prompt
 const MAX_SOURCE_TEXT_LEN = 50_000;  // MCQ sourceText field
 const MAX_TOPIC_LEN       = 2_000;   // flashcard/quiz topic string
+const MAX_DOC_CONTEXT     = 20_000;  // chars of document text passed to Claude (~5k tokens)
 
 // Bounds for AI-generated item counts
 const MIN_GENERATED = 1;
@@ -18,6 +19,7 @@ module.exports = {
   MAX_MESSAGE_LEN,
   MAX_SOURCE_TEXT_LEN,
   MAX_TOPIC_LEN,
+  MAX_DOC_CONTEXT,
   MIN_GENERATED,
   MAX_GENERATED,
   VALID_DIFFICULTIES,

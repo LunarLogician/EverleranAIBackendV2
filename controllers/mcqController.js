@@ -1,8 +1,9 @@
 const MCQ = require('../models/MCQ');
 const Document = require('../models/Document');
+const Usage = require('../models/Usage');
 const { generateMCQsFromText } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
-const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_SOURCE_TEXT_LEN } = require('../validators/schemas');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_SOURCE_TEXT_LEN, MAX_DOC_CONTEXT } = require('../validators/schemas');
 
 // ── Helper: normalize correctAnswer to letter (A/B/C/D) ──
 const getCorrectLabel = (q) => {
@@ -28,6 +29,17 @@ exports.generateMCQs = async (req, res, next) => {
     }
     if (sourceText.length > MAX_SOURCE_TEXT_LEN) {
       return res.status(400).json({ message: `sourceText must be ${MAX_SOURCE_TEXT_LEN} characters or fewer` });
+    }
+
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
     }
 
     console.log('🎯 Generating MCQs...', { numQuestions });
@@ -81,10 +93,22 @@ exports.generateMCQsFromDocument = async (req, res, next) => {
       return res.status(403).json({ message: 'Unauthorized access to document' });
     }
 
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
+
+    const docText = document.textContent.substring(0, MAX_DOC_CONTEXT);
     console.log('🎯 Generating MCQs from document...', { documentId, numQuestions });
 
     const { questions, inputTokens, outputTokens } = await generateMCQsFromText(
-      document.textContent,
+      docText,
       numQuestions
     );
 
@@ -92,7 +116,7 @@ exports.generateMCQsFromDocument = async (req, res, next) => {
       userId,
       documentId,
       title: title || `MCQ from ${document.title}`,
-      sourceText: document.textContent,
+      sourceText: docText,
       questions,
     });
 
@@ -156,10 +180,21 @@ exports.generateMCQsFromFile = async (req, res, next) => {
       });
     }
 
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.tokenLimit,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
+
     console.log('🎯 Generating MCQs from file...', { numQuestions });
 
     const { questions, inputTokens, outputTokens } = await generateMCQsFromText(
-      fileContent,
+      fileContent.substring(0, MAX_DOC_CONTEXT),
       numQuestions
     );
 

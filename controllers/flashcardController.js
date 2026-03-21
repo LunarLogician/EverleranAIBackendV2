@@ -3,7 +3,7 @@ const Document = require('../models/Document');
 const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
-const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, VALID_DIFFICULTIES, MAX_TOPIC_LEN } = require('../validators/schemas');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, VALID_DIFFICULTIES, MAX_TOPIC_LEN, MAX_DOC_CONTEXT } = require('../validators/schemas');
 
 // Generate flashcards
 exports.generateFlashcards = async (req, res, next) => {
@@ -27,6 +27,17 @@ exports.generateFlashcards = async (req, res, next) => {
       setTitle = `${document.title} - Flashcards`;
     }
 
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
+
     // Call Claude to generate flashcards
     const prompt = `Generate exactly ${numberOfCards} concise flashcards from this document.
 Each card must have:
@@ -38,7 +49,7 @@ Avoid long paragraphs. Focus only on the key idea needed to answer the question.
 Return ONLY a JSON array of objects with "front" and "back" keys. Do not include any extra text.
 
 Document:
-${document.textContent}`;
+${document.textContent.substring(0, MAX_DOC_CONTEXT)}`;
 
     const claudeMessages = [
       {
@@ -196,6 +207,17 @@ exports.generateFlashcardsFromText = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'difficulty must be easy, intermediate, or hard' });
     }
 
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
+
     const prompt = `Generate exactly ${numberOfCards} concise flashcards about "${topic}".
 Difficulty level: ${difficulty}
 
@@ -308,6 +330,17 @@ Return ONLY a valid JSON array with this exact structure. DO NOT include any tex
 [
   { "front": "Question or term here?", "back": "Answer or definition here" }
 ]`;
+
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
 
     const claudeMessages = [{ role: 'user', content: prompt }];
     const claudeResponse = await callClaude(claudeMessages, 'flashcards_from_file', 2048);

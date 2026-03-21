@@ -3,7 +3,7 @@ const Document = require('../models/Document');
 const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
-const { isValidObjectId, MIN_GENERATED, MAX_GENERATED } = require('../validators/schemas');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_DOC_CONTEXT } = require('../validators/schemas');
 
 // Shuffle options and update correctAnswer index so the correct answer
 // is not always in the same position (Claude tends to put it at index 0).
@@ -56,8 +56,19 @@ exports.generateQuiz = async (req, res, next) => {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
 
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
+
     // Call Claude to generate quiz
-    const prompt = `Generate exactly ${numberOfQuestions} multiple choice questions from this document. Return JSON format with array of objects containing "question", "options" (array of 4 strings), "correctAnswer" (the 0-based index of the correct option — vary this across questions, do NOT always use 0), and "explanation" keys. Only return valid JSON array.\n\nDocument:\n${document.textContent}`;
+    const prompt = `Generate exactly ${numberOfQuestions} multiple choice questions from this document. Return JSON format with array of objects containing "question", "options" (array of 4 strings), "correctAnswer" (the 0-based index of the correct option — vary this across questions, do NOT always use 0), and "explanation" keys. Only return valid JSON array.\n\nDocument:\n${document.textContent.substring(0, MAX_DOC_CONTEXT)}`;
 
     const claudeMessages = [
       {
@@ -166,6 +177,17 @@ const topic = topic0 || text;
       return res.status(400).json({
         success: false,
         message: 'difficulty must be easy, intermediate, or hard',
+      });
+    }
+
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
       });
     }
 
@@ -327,12 +349,23 @@ exports.generateQuizFromFile = async (req, res, next) => {
       });
     }
 
+    // Token limit gate — check BEFORE calling Claude
+    const usagePreflight = await Usage.findOne({ userId });
+    if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
+      return res.status(429).json({
+        message: 'You have reached your token limit. Upgrade your plan to continue.',
+        upgradeRequired: true,
+        tokenCount: usagePreflight.totalTokens,
+        tokenLimit: usagePreflight.tokenLimit,
+      });
+    }
+
     // Create prompt for quiz generation from file
     const prompt = `Generate exactly ${numberOfQuestions} multiple choice quiz questions based on this content:
 
 Content:
 """
-${fileContent}
+${fileContent.substring(0, MAX_DOC_CONTEXT)}
 """
 
 Difficulty level: ${difficulty}
