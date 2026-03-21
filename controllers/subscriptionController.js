@@ -72,10 +72,11 @@ exports.upgradeSubscription = async (req, res, next) => {
       { new: true }
     );
 
-    // Update usage token limit
+    // Update usage token limit (upsert in case Usage doc doesn't exist yet)
     await Usage.findOneAndUpdate(
       { userId },
-      { tokenLimit: config.tokenLimit }
+      { tokenLimit: config.tokenLimit },
+      { upsert: true }
     );
 
     res.status(200).json({
@@ -108,7 +109,8 @@ exports.cancelSubscription = async (req, res, next) => {
 
     await Usage.findOneAndUpdate(
       { userId },
-      { tokenLimit: 200 }
+      { tokenLimit: 200 },
+      { upsert: true }
     );
 
     res.status(200).json({
@@ -219,14 +221,14 @@ exports.paymentWebhook = async (req, res, next) => {
         },
         { new: true }
       );
-      await Usage.findOneAndUpdate({ userId }, { tokenLimit: config.tokenLimit });
+      await Usage.findOneAndUpdate({ userId }, { tokenLimit: config.tokenLimit }, { upsert: true });
       console.log(`✅ Plan activated: ${plan} for user ${userId}`);
     } else if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {
       await Subscription.findOneAndUpdate(
         { userId },
         { plan: 'free', status: 'cancelled', tokenLimit: 200, features: PLAN_CONFIG.free.features }
       );
-      await Usage.findOneAndUpdate({ userId }, { tokenLimit: 200 });
+      await Usage.findOneAndUpdate({ userId }, { tokenLimit: 200 }, { upsert: true });
       console.log(`🔴 Plan cancelled for user ${userId}`);
     }
 

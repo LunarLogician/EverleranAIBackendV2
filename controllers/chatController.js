@@ -201,17 +201,24 @@ exports.getChatCount = async (req, res, next) => {
     const genericEntry = usage?.usageBreakdown.find((u) => u.featureName === 'genericChat');
     const count = genericEntry?.count || 0;
     
-    // For free users, show chat count; for paid users, show unlimited
+    // Derive tokenLimit from plan — never trust stale Usage.tokenLimit
     const plan = subscription?.plan || 'free';
-    const isUnlimited = plan !== 'free' && plan !== undefined;
-    
+    const PLAN_TOKEN_LIMITS = { free: 200, basic: 100000, pro: 500000 };
+    const tokenLimit = PLAN_TOKEN_LIMITS[plan] ?? 200;
+    const isUnlimited = plan !== 'free';
+
+    // Keep Usage.tokenLimit in sync if it's stale
+    if (usage && usage.tokenLimit !== tokenLimit) {
+      await Usage.findOneAndUpdate({ userId: userIdQuery }, { tokenLimit }, { upsert: true });
+    }
+
     res.status(200).json({ 
       success: true, 
       count: isUnlimited ? 0 : count,
       plan,
       unlimited: isUnlimited,
       tokenCount: usage?.totalTokens || 0,
-      tokenLimit: usage?.tokenLimit || 200,
+      tokenLimit,
     });
   } catch (error) {
     next(error);
