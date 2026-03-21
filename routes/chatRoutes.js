@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-
 const chatController = require('../controllers/chatController');
 const authMiddleware = require('../middleware/auth');
 
@@ -15,7 +14,7 @@ const upload = multer({
 
 router.get('/history', chatController.getHistory); // <-- This must come first!
 router.get('/count', chatController.getChatCount); // <-- Add this before /:chatId
-router.post('/direct', chatController.directChat);
+router.post('/direct', upload.single('file'), chatController.directChat);
 router.post('/', chatController.createChat);
 router.get('/:chatId/summary', chatController.generateSummary);
 router.get('/:chatId', chatController.getChatHistory);
