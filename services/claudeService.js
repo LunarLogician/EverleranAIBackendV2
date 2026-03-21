@@ -116,8 +116,115 @@ Return ONLY valid JSON, no markdown formatting or code blocks.`;
   }
 };
 
+// Generate an exam paper from text
+// numQuestions: number of questions (3-30)
+// difficulty: 'easy' | 'medium' | 'hard'
+// subject: optional subject label
+const generateExamPaperFromText = async (sourceText, numQuestions = 10, difficulty = 'medium', subject = '') => {
+  try {
+    if (!sourceText || sourceText.trim().length === 0) {
+      throw new Error('Source text cannot be empty');
+    }
+
+    const subjectNote = subject ? ` for the subject "${subject}"` : '';
+
+    const prompt = `You are an expert educator. Generate an exam paper${subjectNote} with exactly ${numQuestions} questions of ${difficulty} difficulty from the text below.
+
+Use a MIX of question types:
+- "mcq"       – multiple-choice (4 options A/B/C/D, correctAnswer is the letter)
+- "true_false" – true or false statement (correctAnswer is "true" or "false")
+- "short"     – short-answer (1-3 sentences expected, provide sampleAnswer)
+- "long"      – long/essay answer (provide sampleAnswer outline)
+
+Assign marks per question (mcq/true_false = 1-2, short = 3-5, long = 8-15).
+
+Return a JSON object with this exact structure:
+{
+  "instructions": "General exam instructions string",
+  "questions": [
+    {
+      "id": "1",
+      "type": "mcq",
+      "question": "Question text?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": "A",
+      "marks": 2,
+      "explanation": "Why A is correct"
+    },
+    {
+      "id": "2",
+      "type": "true_false",
+      "question": "Statement to evaluate.",
+      "options": ["True", "False"],
+      "correctAnswer": "true",
+      "marks": 1,
+      "explanation": "Brief reason"
+    },
+    {
+      "id": "3",
+      "type": "short",
+      "question": "Short question?",
+      "sampleAnswer": "Expected short answer",
+      "marks": 4
+    },
+    {
+      "id": "4",
+      "type": "long",
+      "question": "Essay/long question?",
+      "sampleAnswer": "Outline of a well-structured answer",
+      "marks": 10
+    }
+  ]
+}
+
+Text to base the exam on:
+${sourceText}
+
+Return ONLY valid JSON, no markdown or code blocks.`;
+
+    const response = await callClaude(
+      [{ role: 'user', content: prompt }],
+      'quiz',
+      4096
+    );
+
+    let jsonContent = response.content.trim();
+    if (jsonContent.startsWith('```json')) {
+      jsonContent = jsonContent.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    } else if (jsonContent.startsWith('```')) {
+      jsonContent = jsonContent.replace(/^```\n?/, '').replace(/\n?```$/, '');
+    }
+
+    const parsed = JSON.parse(jsonContent);
+    const questions = (parsed.questions || []).map((q, idx) => ({
+      id: String(idx + 1),
+      type: q.type || 'mcq',
+      question: q.question,
+      options: q.options || [],
+      correctAnswer: q.correctAnswer || '',
+      sampleAnswer: q.sampleAnswer || '',
+      marks: Number(q.marks) || 1,
+      explanation: q.explanation || '',
+    }));
+
+    const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+
+    return {
+      instructions: parsed.instructions || 'Answer all questions. Write clearly and concisely.',
+      questions,
+      totalMarks,
+      inputTokens: response.inputTokens,
+      outputTokens: response.outputTokens,
+    };
+  } catch (error) {
+    console.error('Exam Paper Generation Error:', error.message);
+    throw new Error(`Failed to generate exam paper: ${error.message}`);
+  }
+};
+
 module.exports = {
   callClaude,
   selectModel,
   generateMCQsFromText,
+  generateExamPaperFromText,
 };

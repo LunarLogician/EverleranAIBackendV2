@@ -31,6 +31,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const flashcardRoutes = require('./routes/flashcardRoutes');
 const quizRoutes = require('./routes/quizRoutes');
 const mcqRoutes = require('./routes/mcqRoutes');
+const examPaperRoutes = require('./routes/examPaperRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 
@@ -86,6 +87,7 @@ app.use('/api/chat', aiLimiter, chatRoutes);
 app.use('/api/flashcards', aiLimiter, flashcardRoutes);
 app.use('/api/quiz', aiLimiter, quizRoutes);
 app.use('/api/mcq', aiLimiter, mcqRoutes);
+app.use('/api/exam-papers', aiLimiter, examPaperRoutes);
 app.use('/api/subscription', generalLimiter, subscriptionRoutes);
 app.use('/api/assignments', aiLimiter, assignmentRoutes);
 
