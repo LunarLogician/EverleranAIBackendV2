@@ -75,6 +75,23 @@ exports.generateExamPaper = async (req, res, next) => {
 
     await exam.save();
 
+    // Update usage
+    const usageDoc = await Usage.findOne({ userId });
+    if (usageDoc) {
+      usageDoc.inputTokens += inputTokens;
+      usageDoc.outputTokens += outputTokens;
+      usageDoc.totalTokens = usageDoc.inputTokens + usageDoc.outputTokens;
+      const featureUsage = usageDoc.usageBreakdown.find((u) => u.featureName === 'examPapers');
+      if (featureUsage) {
+        featureUsage.inputTokens += inputTokens;
+        featureUsage.outputTokens += outputTokens;
+        featureUsage.count += 1;
+      } else {
+        usageDoc.usageBreakdown.push({ featureName: 'examPapers', inputTokens, outputTokens, count: 1 });
+      }
+      await usageDoc.save();
+    }
+
     console.log('✅ Exam paper generated:', { examId: exam._id, count: questions.length, totalMarks });
 
     res.status(201).json({
@@ -143,6 +160,23 @@ exports.generateExamPaperFromDocument = async (req, res, next) => {
     });
 
     await exam.save();
+
+    // Update usage
+    const usageDoc = await Usage.findOne({ userId });
+    if (usageDoc) {
+      usageDoc.inputTokens += inputTokens;
+      usageDoc.outputTokens += outputTokens;
+      usageDoc.totalTokens = usageDoc.inputTokens + usageDoc.outputTokens;
+      const featureUsage = usageDoc.usageBreakdown.find((u) => u.featureName === 'examPapers');
+      if (featureUsage) {
+        featureUsage.inputTokens += inputTokens;
+        featureUsage.outputTokens += outputTokens;
+        featureUsage.count += 1;
+      } else {
+        usageDoc.usageBreakdown.push({ featureName: 'examPapers', inputTokens, outputTokens, count: 1 });
+      }
+      await usageDoc.save();
+    }
 
     console.log('✅ Exam paper from document generated:', { examId: exam._id });
 
@@ -231,6 +265,23 @@ exports.generateExamPaperFromFile = async (req, res, next) => {
     });
 
     await exam.save();
+
+    // Update usage
+    const usageDoc = await Usage.findOne({ userId });
+    if (usageDoc) {
+      usageDoc.inputTokens += inputTokens;
+      usageDoc.outputTokens += outputTokens;
+      usageDoc.totalTokens = usageDoc.inputTokens + usageDoc.outputTokens;
+      const featureUsage = usageDoc.usageBreakdown.find((u) => u.featureName === 'examPapers');
+      if (featureUsage) {
+        featureUsage.inputTokens += inputTokens;
+        featureUsage.outputTokens += outputTokens;
+        featureUsage.count += 1;
+      } else {
+        usageDoc.usageBreakdown.push({ featureName: 'examPapers', inputTokens, outputTokens, count: 1 });
+      }
+      await usageDoc.save();
+    }
 
     console.log('✅ Exam paper from file generated:', { examId: exam._id });
 
