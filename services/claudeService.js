@@ -128,50 +128,34 @@ const generateExamPaperFromText = async (sourceText, numQuestions = 10, difficul
 
     const subjectNote = subject ? ` for the subject "${subject}"` : '';
 
-    const prompt = `You are an expert educator. Generate an exam paper${subjectNote} with exactly ${numQuestions} questions of ${difficulty} difficulty from the text below.
+    const shortCount = Math.ceil(numQuestions * 0.6);
+    const longCount = numQuestions - shortCount;
 
-Use a MIX of question types:
-- "mcq"       – multiple-choice (4 options A/B/C/D, correctAnswer is the letter)
-- "true_false" – true or false statement (correctAnswer is "true" or "false")
-- "short"     – short-answer (1-3 sentences expected, provide sampleAnswer)
-- "long"      – long/essay answer (provide sampleAnswer outline)
+    const prompt = `You are an expert academic examiner. Generate a formal written exam paper${subjectNote} based on the text below.
 
-Assign marks per question (mcq/true_false = 1-2, short = 3-5, long = 8-15).
+The paper must have exactly ${numQuestions} written questions (NO multiple choice, NO true/false):
+- ${shortCount} "short" questions — require a concise written answer of 2-4 sentences. Marks: 3-5 each.
+- ${longCount} "long" questions — require a detailed essay/paragraph answer. Marks: 8-15 each.
+
+Questions should test understanding, analysis, and application — not just recall.
+Difficulty level: ${difficulty}.
 
 Return a JSON object with this exact structure:
 {
-  "instructions": "General exam instructions string",
+  "instructions": "Time allowed: [duration] minutes. Attempt ALL questions. Write your answers clearly and in complete sentences. Begin each answer on a new page.",
   "questions": [
     {
       "id": "1",
-      "type": "mcq",
-      "question": "Question text?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "A",
-      "marks": 2,
-      "explanation": "Why A is correct"
-    },
-    {
-      "id": "2",
-      "type": "true_false",
-      "question": "Statement to evaluate.",
-      "options": ["True", "False"],
-      "correctAnswer": "true",
-      "marks": 1,
-      "explanation": "Brief reason"
-    },
-    {
-      "id": "3",
       "type": "short",
-      "question": "Short question?",
-      "sampleAnswer": "Expected short answer",
+      "question": "Short written question?",
+      "sampleAnswer": "A concise 2-4 sentence model answer.",
       "marks": 4
     },
     {
-      "id": "4",
+      "id": "${shortCount + 1}",
       "type": "long",
-      "question": "Essay/long question?",
-      "sampleAnswer": "Outline of a well-structured answer",
+      "question": "Detailed/essay question?",
+      "sampleAnswer": "A structured outline of the expected full answer covering key points.",
       "marks": 10
     }
   ]
