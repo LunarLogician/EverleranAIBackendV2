@@ -3,7 +3,7 @@ const Document = require('../models/Document');
 const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
-const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_DOC_CONTEXT } = require('../validators/schemas');
+const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_DOC_CONTEXT, MAX_TOPIC_LEN } = require('../validators/schemas');
 
 // Shuffle options and update correctAnswer index so the correct answer
 // is not always in the same position (Claude tends to put it at index 0).
@@ -162,6 +162,12 @@ const topic = topic0 || text;
       return res.status(400).json({
         success: false,
         message: 'topic is required',
+      });
+    }
+    if (topic.length > MAX_TOPIC_LEN) {
+      return res.status(400).json({
+        success: false,
+        message: `topic must be ${MAX_TOPIC_LEN} characters or fewer`,
       });
     }
 

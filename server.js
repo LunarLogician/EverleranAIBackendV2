@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const fs = require('fs');
 
 const connectDB = require('./config/database');
@@ -53,7 +54,7 @@ app.use(cors({
 const makeLimit = (max, windowMs = 15 * 60 * 1000) => rateLimit({
   windowMs,
   max,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
 });

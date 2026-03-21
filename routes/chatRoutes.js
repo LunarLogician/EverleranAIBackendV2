@@ -1,9 +1,16 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+
 const chatController = require('../controllers/chatController');
 const authMiddleware = require('../middleware/auth');
 
 router.use(authMiddleware);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+});
 
 
 router.get('/history', chatController.getHistory); // <-- This must come first!

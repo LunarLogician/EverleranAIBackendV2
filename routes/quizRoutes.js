@@ -4,7 +4,10 @@ const quizController = require('../controllers/quizController');
 const authMiddleware = require('../middleware/auth');
 const multer = require('multer');
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+});
 
 router.use(authMiddleware);
 
