@@ -3,10 +3,10 @@ const mongoose = require('mongoose');
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // Max input sizes to prevent abuse / token burning
-const MAX_MESSAGE_LEN    = 1000;    // chat message / assignment prompt
-const MAX_SOURCE_TEXT_LEN = 1000;  // MCQ sourceText field
-const MAX_TOPIC_LEN       = 1000;   // flashcard/quiz topic string
-const MAX_DOC_CONTEXT     = 1000;  // chars of document text passed to Claude (~5k tokens)
+const MAX_MESSAGE_LEN     = 5_000;   // chat message / assignment prompt
+const MAX_SOURCE_TEXT_LEN = 50_000;  // MCQ sourceText field (users paste full articles)
+const MAX_TOPIC_LEN       = 2_000;   // flashcard/quiz topic string
+const MAX_DOC_CONTEXT     = 20_000;  // chars of document text passed to Claude (~5k tokens)
 
 // Bounds for AI-generated item counts
 const MIN_GENERATED = 1;
