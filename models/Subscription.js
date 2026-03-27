@@ -19,7 +19,7 @@ const subscriptionSchema = new mongoose.Schema(
     },
     tokenLimit: {
       type: Number,
-      default: 200, // Free: 10k, Basic: 50k or 100k, Pro: 500k or unlimited
+      default: 10000, // Free: 10k, Basic: 200k, Pro: 750k
     },
     features: [String], // ['docQA', 'summaryGeneration', 'flashcards', 'quiz', 'advancedAnalysis']
     status: {

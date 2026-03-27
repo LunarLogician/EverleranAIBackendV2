@@ -29,7 +29,7 @@ const usageSchema = new mongoose.Schema(
     },
     tokenLimit: {
       type: Number,
-      default: 200, // Free tier
+      default: 10000, // Free tier
     },
     usageBreakdown: [
       {

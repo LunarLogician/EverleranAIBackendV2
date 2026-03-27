@@ -92,11 +92,11 @@ exports.verifyEmail = async (req, res, next) => {
     user.verificationOtpExpires = null;
 
     // Create free subscription
-    const subscription = new Subscription({ userId: user._id, plan: 'free', tokenLimit: 200 });
+    const subscription = new Subscription({ userId: user._id, plan: 'free', tokenLimit: 10000 });
     await subscription.save();
 
     // Create usage tracker
-    const usage = new Usage({ userId: user._id, tokenLimit: 200 });
+    const usage = new Usage({ userId: user._id, tokenLimit: 10000 });
     await usage.save();
 
     user.subscription = subscription._id;

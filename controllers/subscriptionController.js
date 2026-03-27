@@ -9,9 +9,9 @@ const VARIANT_IDS = {
 };
 
 const PLAN_CONFIG = {
-  free:  { price: 0,    tokenLimit: 200,   features: ['chat'] },
-  basic: { price: 999,  tokenLimit: 100000,  features: ['chat', 'assignments', 'documents'] },
-  pro:   { price: 1999, tokenLimit: 500000,  features: ['chat', 'assignments', 'documents', 'quiz', 'flashcards'] },
+  free:  { price: 0,    tokenLimit: 10000,  features: ['chat'] },
+  basic: { price: 999,  tokenLimit: 200000, features: ['chat', 'assignments', 'documents'] },
+  pro:   { price: 1999, tokenLimit: 750000, features: ['chat', 'assignments', 'documents', 'quiz', 'flashcards'] },
 };
 
 // Get available plans (public — no auth needed)
@@ -226,7 +226,7 @@ exports.paymentWebhook = async (req, res, next) => {
     } else if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {
       await Subscription.findOneAndUpdate(
         { userId },
-        { plan: 'free', status: 'cancelled', tokenLimit: 200, features: PLAN_CONFIG.free.features }
+        { plan: 'free', status: 'cancelled', tokenLimit: 10000, features: PLAN_CONFIG.free.features }
       );
       await Usage.findOneAndUpdate({ userId }, { tokenLimit: 200 }, { upsert: true });
       console.log(`🔴 Plan cancelled for user ${userId}`);
