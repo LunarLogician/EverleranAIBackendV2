@@ -459,6 +459,38 @@ exports.getChatHistory = async (req, res, next) => {
   }
 };
 
+// Delete a single chat by ID
+exports.deleteChat = async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID format' });
+    }
+
+    const chat = await Chat.findOneAndDelete({ _id: chatId, userId });
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found or unauthorized' });
+    }
+
+    res.status(200).json({ success: true, message: 'Chat deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete ALL chats for the authenticated user
+exports.deleteAllChats = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const result = await Chat.deleteMany({ userId });
+    res.status(200).json({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Generate summary
 exports.generateSummary = async (req, res, next) => {
   try {

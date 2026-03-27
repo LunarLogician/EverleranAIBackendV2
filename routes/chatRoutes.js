@@ -19,5 +19,7 @@ router.post('/', chatController.createChat);
 router.get('/:chatId/summary', chatController.generateSummary);
 router.get('/:chatId', chatController.getChatHistory);
 router.post('/:chatId/message', chatController.sendMessage);
+router.delete('/all', chatController.deleteAllChats);
+router.delete('/:chatId', chatController.deleteChat);
 
 module.exports = router;
