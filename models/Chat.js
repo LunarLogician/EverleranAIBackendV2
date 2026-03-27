@@ -55,4 +55,7 @@ const chatSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+chatSchema.index({ userId: 1 });
+chatSchema.index({ userId: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Chat', chatSchema);
