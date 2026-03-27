@@ -11,7 +11,7 @@ const VARIANT_IDS = {
 const PLAN_CONFIG = {
   free:  { price: 0,    tokenLimit: 10000,  features: ['chat'] },
   basic: { price: 999,  tokenLimit: 200000, features: ['chat', 'assignments', 'documents'] },
-  pro:   { price: 1999, tokenLimit: 750000, features: ['chat', 'assignments', 'documents', 'quiz', 'flashcards'] },
+  pro:   { price: 1999, tokenLimit: 1000000, features: ['chat', 'assignments', 'documents', 'quiz', 'flashcards'] },
 };
 
 // Get available plans (public — no auth needed)

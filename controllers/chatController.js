@@ -228,7 +228,7 @@ exports.getChatCount = async (req, res, next) => {
     
     // Derive tokenLimit from plan — never trust stale Usage.tokenLimit
     const plan = subscription?.plan || 'free';
-    const PLAN_TOKEN_LIMITS = { free: 10000, basic: 200000, pro: 750000 };
+    const PLAN_TOKEN_LIMITS = { free: 10000, basic: 200000, pro: 1000000 };
     const tokenLimit = PLAN_TOKEN_LIMITS[plan] ?? 10000;
     const isUnlimited = plan !== 'free';
 
