@@ -45,7 +45,13 @@ startMonthlyReset();
 
 // Middleware
 app.use(helmet());
-app.use(compression());
+// Skip gzip compression for SSE endpoints — compression buffers chunks and breaks streaming
+app.use(compression({
+  filter: (req, res) => {
+    if (res.getHeader('Content-Type')?.includes('text/event-stream')) return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(cors({
   origin: process.env.CORS_ORIGIN?.split(',') || '*',
   credentials: true,

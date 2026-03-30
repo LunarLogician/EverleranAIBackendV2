@@ -15,6 +15,7 @@ const upload = multer({
 router.get('/history', chatController.getHistory); // <-- This must come first!
 router.get('/count', chatController.getChatCount); // <-- Add this before /:chatId
 router.post('/direct', upload.single('file'), chatController.directChat);
+router.post('/stream', upload.single('file'), chatController.directChatStream);
 router.post('/', chatController.createChat);
 router.get('/:chatId/summary', chatController.generateSummary);
 router.get('/:chatId', chatController.getChatHistory);

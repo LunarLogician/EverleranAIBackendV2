@@ -207,8 +207,61 @@ Return ONLY valid JSON, no markdown or code blocks.`;
   }
 };
 
+// Streaming variant of callClaude.
+// Calls Anthropic with stream:true, fires onChunk(text) for every token,
+// and resolves with { inputTokens, outputTokens } when the stream ends.
+const callClaudeStream = async (messages, useCase = 'qa', maxTokens = 3072, systemPrompt = null, onChunk) => {
+  try {
+    const model = selectModel(useCase);
+    const body = { model, max_tokens: maxTokens, stream: true, messages };
+    if (systemPrompt) body.system = systemPrompt;
+
+    const response = await claudeClient.post('/', body, {
+      responseType: 'stream',
+      timeout: 120_000, // longer timeout for streaming generations
+    });
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let buffer = '';
+
+    return new Promise((resolve, reject) => {
+      response.data.on('data', (chunk) => {
+        buffer += chunk.toString('utf8');
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep last incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw || raw === '[DONE]') continue;
+          try {
+            const event = JSON.parse(raw);
+            if (event.type === 'message_start') {
+              inputTokens = event.message?.usage?.input_tokens ?? 0;
+            } else if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+              onChunk(event.delta.text);
+            } else if (event.type === 'message_delta') {
+              outputTokens = event.usage?.output_tokens ?? 0;
+            }
+          } catch (_) {
+            // skip malformed SSE lines
+          }
+        }
+      });
+
+      response.data.on('end', () => resolve({ inputTokens, outputTokens }));
+      response.data.on('error', (err) => reject(new Error(`Claude stream error: ${err.message}`)));
+    });
+  } catch (error) {
+    console.error('Claude Stream API Error:', error.response?.data || error.message);
+    throw new Error(`Claude stream failed: ${error.message}`);
+  }
+};
+
 module.exports = {
   callClaude,
+  callClaudeStream,
   selectModel,
   generateMCQsFromText,
   generateExamPaperFromText,
