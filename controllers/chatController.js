@@ -154,7 +154,7 @@ exports.directChat = async (req, res, next) => {
 
     // Call Claude API
     console.log(`\n🤖 [directChat] Calling Claude with ${featureName} mode... history=${priorHistory.length} msgs`);
-    const claudeResponse = await callClaude(claudeMessages, 'qa', 1024, claudeSystemPrompt);
+    const claudeResponse = await callClaude(claudeMessages, 'qa', 3072, claudeSystemPrompt);
     console.log(`   Response tokens: input=${claudeResponse.inputTokens}, output=${claudeResponse.outputTokens}`);
 
     // Update usage — reuse preflight doc instead of a second DB round-trip
@@ -351,7 +351,7 @@ exports.sendMessage = async (req, res, next) => {
     }));
 
     // Call Claude API with conversation history
-    const claudeResponse = await callClaude(historyMessages, 'qa', 1024, systemWithDoc);
+    const claudeResponse = await callClaude(historyMessages, 'qa', 3072, systemWithDoc);
 
     // Add assistant response
     chat.messages.push({
