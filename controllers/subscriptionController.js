@@ -1,6 +1,13 @@
 const crypto = require('crypto');
 const Subscription = require('../models/Subscription');
 const Usage = require('../models/Usage');
+const redis = require('../config/redis');
+
+async function invalidateSubCache(userId) {
+  if (redis) {
+    try { await redis.del(`sub:${userId.toString()}`); } catch (_) { /* non-fatal */ }
+  }
+}
 
 const LS_API = 'https://api.lemonsqueezy.com/v1';
 const VARIANT_IDS = {
@@ -78,6 +85,7 @@ exports.upgradeSubscription = async (req, res, next) => {
       { tokenLimit: config.tokenLimit },
       { upsert: true }
     );
+    await invalidateSubCache(userId);
 
     res.status(200).json({
       success: true,
@@ -112,6 +120,7 @@ exports.cancelSubscription = async (req, res, next) => {
       { tokenLimit: 200 },
       { upsert: true }
     );
+    await invalidateSubCache(userId);
 
     res.status(200).json({
       success: true,
@@ -222,6 +231,7 @@ exports.paymentWebhook = async (req, res, next) => {
         { new: true }
       );
       await Usage.findOneAndUpdate({ userId }, { tokenLimit: config.tokenLimit }, { upsert: true });
+      await invalidateSubCache(userId);
       console.log(`✅ Plan activated: ${plan} for user ${userId}`);
     } else if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {
       await Subscription.findOneAndUpdate(
@@ -229,6 +239,7 @@ exports.paymentWebhook = async (req, res, next) => {
         { plan: 'free', status: 'cancelled', tokenLimit: 10000, features: PLAN_CONFIG.free.features }
       );
       await Usage.findOneAndUpdate({ userId }, { tokenLimit: 200 }, { upsert: true });
+      await invalidateSubCache(userId);
       console.log(`🔴 Plan cancelled for user ${userId}`);
     }
 

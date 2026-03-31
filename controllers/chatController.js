@@ -5,6 +5,31 @@ const Usage = require('../models/Usage');
 const Subscription = require('../models/Subscription');
 const { callClaude, callClaudeStream } = require('../services/claudeService');
 const { isValidObjectId, MAX_MESSAGE_LEN } = require('../validators/schemas');
+const redis = require('../config/redis');
+
+const USAGE_CACHE_TTL = 60; // 1 minute
+
+async function getCachedUsage(userId) {
+  if (redis) {
+    try {
+      const cached = await redis.get(`usage:${userId}`);
+      if (cached) return JSON.parse(cached);
+    } catch (_) { /* fall through */ }
+  }
+  const doc = await Usage.findOne({ userId });
+  if (doc && redis) {
+    try {
+      await redis.set(`usage:${userId}`, JSON.stringify({ totalTokens: doc.totalTokens, tokenLimit: doc.tokenLimit }), 'EX', USAGE_CACHE_TTL);
+    } catch (_) { /* non-fatal */ }
+  }
+  return doc;
+}
+
+async function invalidateUsageCache(userId) {
+  if (redis) {
+    try { await redis.del(`usage:${userId}`); } catch (_) { /* non-fatal */ }
+  }
+}
 
 // Direct chat - with or without document (flexible mode)
 exports.directChat = async (req, res, next) => {
@@ -141,8 +166,8 @@ exports.directChat = async (req, res, next) => {
       ];
     }
 
-    // Token limit gate — check BEFORE calling Claude
-    const usagePreflight = await Usage.findOne({ userId });
+    // Token limit gate — check BEFORE calling Claude (cache-backed)
+    const usagePreflight = await getCachedUsage(userId);
     if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
       return res.status(429).json({
         message: 'You have reached your token limit. Upgrade your plan to continue.',
@@ -158,19 +183,19 @@ exports.directChat = async (req, res, next) => {
     console.log(`   Response tokens: input=${claudeResponse.inputTokens}, output=${claudeResponse.outputTokens}`);
 
     // Update usage — reuse preflight doc instead of a second DB round-trip
-    const usage = usagePreflight || await Usage.findOne({ userId });
+    const usage = usagePreflight?._id ? usagePreflight : await Usage.findOne({ userId });
     if (usage) {
       usage.inputTokens += claudeResponse.inputTokens;
       usage.outputTokens += claudeResponse.outputTokens;
       usage.totalTokens = usage.inputTokens + usage.outputTokens;
 
       // Track feature usage
-      const featureUsage = usage.usageBreakdown.find((u) => u.featureName === featureName);
+      const featureUsage = usage.usageBreakdown?.find((u) => u.featureName === featureName);
       if (featureUsage) {
         featureUsage.inputTokens += claudeResponse.inputTokens;
         featureUsage.outputTokens += claudeResponse.outputTokens;
         featureUsage.count += 1;
-      } else {
+      } else if (usage.usageBreakdown) {
         usage.usageBreakdown.push({
           featureName,
           inputTokens: claudeResponse.inputTokens,
@@ -179,6 +204,7 @@ exports.directChat = async (req, res, next) => {
         });
       }
       await usage.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     // Persist messages to Chat collection (chatDoc already loaded above)
@@ -291,8 +317,8 @@ exports.directChatStream = async (req, res, next) => {
       claudeMessages = [...priorHistory, { role: 'user', content: buildContent(messageText) }];
     }
 
-    // — Token limit gate (before opening SSE connection) —
-    const usagePreflight = await Usage.findOne({ userId });
+    // — Token limit gate (before opening SSE connection) — (cache-backed)
+    const usagePreflight = await getCachedUsage(userId);
     if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
       return res.status(429).json({
         message: 'You have reached your token limit. Upgrade your plan to continue.',
@@ -342,20 +368,21 @@ exports.directChatStream = async (req, res, next) => {
     await chatDoc.save();
 
     // — Update usage —
-    const usage = usagePreflight || await Usage.findOne({ userId });
+    const usage = usagePreflight?._id ? usagePreflight : await Usage.findOne({ userId });
     if (usage) {
       usage.inputTokens += inputTokens;
       usage.outputTokens += outputTokens;
       usage.totalTokens = usage.inputTokens + usage.outputTokens;
-      const featureUsage = usage.usageBreakdown.find((u) => u.featureName === featureName);
+      const featureUsage = usage.usageBreakdown?.find((u) => u.featureName === featureName);
       if (featureUsage) {
         featureUsage.inputTokens += inputTokens;
         featureUsage.outputTokens += outputTokens;
         featureUsage.count += 1;
-      } else {
+      } else if (usage.usageBreakdown) {
         usage.usageBreakdown.push({ featureName, inputTokens, outputTokens, count: 1 });
       }
       await usage.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     res.write(`data: ${JSON.stringify({ type: 'done', chatId: chatDoc._id, tokenCount: usage?.totalTokens ?? 0 })}\n\n`);
