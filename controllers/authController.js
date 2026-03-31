@@ -305,6 +305,48 @@ exports.googleAuthCallback = async (req, res, next) => {
   }
 };
 
+// Update streak — call once per day on login/mount
+exports.updateStreak = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    if (!user.lastActiveDate) {
+      // First ever activity
+      user.streak = 1;
+      user.lastActiveDate = todayUTC;
+    } else {
+      const lastUTC = new Date(Date.UTC(
+        user.lastActiveDate.getUTCFullYear(),
+        user.lastActiveDate.getUTCMonth(),
+        user.lastActiveDate.getUTCDate()
+      ));
+      const diffDays = Math.round((todayUTC - lastUTC) / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 0) {
+        // Already updated today — return current streak without changes
+        return res.status(200).json({ success: true, streak: user.streak, lastActiveDate: user.lastActiveDate });
+      } else if (diffDays === 1) {
+        // Consecutive day
+        user.streak += 1;
+        user.lastActiveDate = todayUTC;
+      } else {
+        // Streak broken
+        user.streak = 1;
+        user.lastActiveDate = todayUTC;
+      }
+    }
+
+    await user.save();
+    res.status(200).json({ success: true, streak: user.streak, lastActiveDate: user.lastActiveDate });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get current user
 exports.getCurrentUser = async (req, res, next) => {
   try {
@@ -313,7 +355,11 @@ exports.getCurrentUser = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      user,
+      user: {
+        ...user.toObject(),
+        streak: user.streak ?? 0,
+        lastActiveDate: user.lastActiveDate ?? null,
+      },
       usage: {
         totalTokens: usage?.totalTokens || 0,
         tokenLimit: usage?.tokenLimit || 200,

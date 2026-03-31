@@ -13,5 +13,6 @@ router.post('/reset-password', authController.resetPassword);
 
 // Protected routes
 router.get('/me', authMiddleware, authController.getCurrentUser);
+router.post('/streak', authMiddleware, authController.updateStreak);
 
 module.exports = router;

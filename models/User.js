@@ -51,6 +51,9 @@ const userSchema = new mongoose.Schema(
     // Password reset
     resetOtp: { type: String, default: null },
     resetOtpExpires: { type: Date, default: null },
+    // Streak tracking
+    streak: { type: Number, default: 0 },
+    lastActiveDate: { type: Date, default: null },
   },
   { timestamps: true }
 );
