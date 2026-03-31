@@ -3,6 +3,7 @@ const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
 const { MAX_MESSAGE_LEN, MAX_DOC_CONTEXT } = require('../validators/schemas');
+const { getCachedUsage } = require('../utils/cache');
 
 // ─────────────────────────────────────────────
 // ENDPOINT 1: Generate humanized assignment
@@ -77,7 +78,7 @@ Just write the assignment directly - no intro like "Here's your assignment" or "
 Make it sound like YOU wrote it, not like an AI wrote it.`;
 
     // Token limit gate — check BEFORE calling Claude
-    const usagePreflight = await Usage.findOne({ userId });
+    const usagePreflight = await getCachedUsage(userId);
     if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
       return res.status(429).json({
         message: 'You have reached your token limit. Upgrade your plan to continue.',
@@ -191,7 +192,7 @@ Rewriting rules:
 Just output the rewritten assignment - no intro or explanation. Make it sound like ${studentName} wrote it naturally.`;
 
       // Token limit gate — check BEFORE calling Claude
-      const usagePreflight = await Usage.findOne({ userId });
+      const usagePreflight = await getCachedUsage(userId);
       if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
         return res.status(429).json({
           message: 'You have reached your token limit. Upgrade your plan to continue.',

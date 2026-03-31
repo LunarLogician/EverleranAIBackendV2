@@ -4,6 +4,7 @@ const Usage = require('../models/Usage');
 const { generateExamPaperFromText } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
 const { isValidObjectId, MAX_SOURCE_TEXT_LEN, MAX_DOC_CONTEXT } = require('../validators/schemas');
+const { getCachedUsage, invalidateUsageCache } = require('../utils/cache');
 
 const MIN_QUESTIONS = 3;
 const MAX_QUESTIONS = 30;
@@ -13,7 +14,7 @@ const clampQuestions = (raw, def = 10) =>
 
 // ── Token-limit preflight ────────────────────────────────────────────────────
 const checkTokenLimit = async (userId) => {
-  const usage = await Usage.findOne({ userId });
+  const usage = await getCachedUsage(userId);
   if (usage && usage.totalTokens >= usage.tokenLimit) {
     return {
       blocked: true,
@@ -90,6 +91,7 @@ exports.generateExamPaper = async (req, res, next) => {
         usageDoc.usageBreakdown.push({ featureName: 'examPapers', inputTokens, outputTokens, count: 1 });
       }
       await usageDoc.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     console.log('✅ Exam paper generated:', { examId: exam._id, count: questions.length, totalMarks });
@@ -176,6 +178,7 @@ exports.generateExamPaperFromDocument = async (req, res, next) => {
         usageDoc.usageBreakdown.push({ featureName: 'examPapers', inputTokens, outputTokens, count: 1 });
       }
       await usageDoc.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     console.log('✅ Exam paper from document generated:', { examId: exam._id });
@@ -281,6 +284,7 @@ exports.generateExamPaperFromFile = async (req, res, next) => {
         usageDoc.usageBreakdown.push({ featureName: 'examPapers', inputTokens, outputTokens, count: 1 });
       }
       await usageDoc.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     console.log('✅ Exam paper from file generated:', { examId: exam._id });

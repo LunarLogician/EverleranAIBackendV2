@@ -5,31 +5,7 @@ const Usage = require('../models/Usage');
 const Subscription = require('../models/Subscription');
 const { callClaude, callClaudeStream } = require('../services/claudeService');
 const { isValidObjectId, MAX_MESSAGE_LEN } = require('../validators/schemas');
-const redis = require('../config/redis');
-
-const USAGE_CACHE_TTL = 60; // 1 minute
-
-async function getCachedUsage(userId) {
-  if (redis) {
-    try {
-      const cached = await redis.get(`usage:${userId}`);
-      if (cached) return JSON.parse(cached);
-    } catch (_) { /* fall through */ }
-  }
-  const doc = await Usage.findOne({ userId });
-  if (doc && redis) {
-    try {
-      await redis.set(`usage:${userId}`, JSON.stringify({ totalTokens: doc.totalTokens, tokenLimit: doc.tokenLimit }), 'EX', USAGE_CACHE_TTL);
-    } catch (_) { /* non-fatal */ }
-  }
-  return doc;
-}
-
-async function invalidateUsageCache(userId) {
-  if (redis) {
-    try { await redis.del(`usage:${userId}`); } catch (_) { /* non-fatal */ }
-  }
-}
+const { getCachedUsage, invalidateUsageCache } = require('../utils/cache');
 
 // Direct chat - with or without document (flexible mode)
 exports.directChat = async (req, res, next) => {

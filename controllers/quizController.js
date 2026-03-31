@@ -4,6 +4,7 @@ const Usage = require('../models/Usage');
 const { callClaude } = require('../services/claudeService');
 const { extractTextFromFile } = require('../services/documentService');
 const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_DOC_CONTEXT, MAX_TOPIC_LEN } = require('../validators/schemas');
+const { getCachedUsage, invalidateUsageCache } = require('../utils/cache');
 
 // Shuffle options and update correctAnswer index so the correct answer
 // is not always in the same position (Claude tends to put it at index 0).
@@ -57,7 +58,7 @@ exports.generateQuiz = async (req, res, next) => {
     }
 
     // Token limit gate — check BEFORE calling Claude
-    const usagePreflight = await Usage.findOne({ userId });
+    const usagePreflight = await getCachedUsage(userId);
     if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
       return res.status(429).json({
         message: 'You have reached your token limit. Upgrade your plan to continue.',
@@ -130,6 +131,7 @@ exports.generateQuiz = async (req, res, next) => {
       }
 
       await usage.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     res.status(201).json({
@@ -187,7 +189,7 @@ const topic = topic0 || text;
     }
 
     // Token limit gate — check BEFORE calling Claude
-    const usagePreflight = await Usage.findOne({ userId });
+    const usagePreflight = await getCachedUsage(userId);
     if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
       return res.status(429).json({
         message: 'You have reached your token limit. Upgrade your plan to continue.',
@@ -285,6 +287,7 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
       }
 
       await usage.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     res.status(201).json({
@@ -356,7 +359,7 @@ exports.generateQuizFromFile = async (req, res, next) => {
     }
 
     // Token limit gate — check BEFORE calling Claude
-    const usagePreflight = await Usage.findOne({ userId });
+    const usagePreflight = await getCachedUsage(userId);
     if (usagePreflight && usagePreflight.totalTokens >= usagePreflight.tokenLimit) {
       return res.status(429).json({
         message: 'You have reached your token limit. Upgrade your plan to continue.',
@@ -460,6 +463,7 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
       }
 
       await usage.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     res.status(201).json({
@@ -583,6 +587,7 @@ exports.submitQuizAttempt = async (req, res, next) => {
       usage.outputTokens += claudeResponse.outputTokens;
       usage.totalTokens = usage.inputTokens + usage.outputTokens;
       await usage.save();
+      await invalidateUsageCache(userId.toString());
     }
 
     res.status(200).json({
