@@ -6,6 +6,34 @@ const { extractTextFromFile } = require('../services/documentService');
 const { isValidObjectId, MIN_GENERATED, MAX_GENERATED, MAX_DOC_CONTEXT, MAX_TOPIC_LEN } = require('../validators/schemas');
 const { getCachedUsage, invalidateUsageCache } = require('../utils/cache');
 
+// Robustly extract quiz question objects from potentially malformed JSON.
+function extractQuizObjects(text) {
+  const results = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && text[i] !== '{') i++;
+    if (i >= text.length) break;
+    const start = i;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (; i < text.length; i++) {
+      const ch = text[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\' && inString) { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) { i++; break; } }
+    }
+    try {
+      const obj = JSON.parse(text.substring(start, i));
+      if (obj && obj.question) results.push(obj);
+    } catch { /* skip corrupted object */ }
+  }
+  return results;
+}
+
 // Shuffle options and update correctAnswer index so the correct answer
 // is not always in the same position (Claude tends to put it at index 0).
 function shuffleOptions(questions) {
@@ -236,22 +264,19 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
     try {
       const jsonMatch = claudeResponse.content.match(/\[[\s\S]*\]/);
       questionsData = JSON.parse(jsonMatch ? jsonMatch[0] : claudeResponse.content);
-      
-      // Validate questions structure
-      if (!Array.isArray(questionsData)) {
-        throw new Error('Response is not an array');
+      if (!Array.isArray(questionsData)) throw new Error('Response is not an array');
+    } catch {
+      console.error('JSON parse failed, using object-by-object extraction');
+      questionsData = extractQuizObjects(claudeResponse.content);
+      if (questionsData.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to generate valid quiz. Please try again.',
+        });
       }
-      
-      questionsData = questionsData.slice(0, numberOfQuestions);
-      questionsData = shuffleOptions(questionsData);
-    } catch (parseError) {
-      console.error('Parse error:', parseError.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Failed to generate valid quiz. Please try again.',
-        error: parseError.message,
-      });
     }
+    questionsData = questionsData.slice(0, numberOfQuestions);
+    questionsData = shuffleOptions(questionsData);
 
     // Create quiz document
     const title = quizTitle || `${topic} Quiz (${difficulty})`;
@@ -414,40 +439,19 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
     try {
       const jsonMatch = claudeResponse.content.match(/\[[\s\S]*\]/);
       questionsData = JSON.parse(jsonMatch ? jsonMatch[0] : claudeResponse.content);
-
-      if (!Array.isArray(questionsData)) {
-        throw new Error('Response is not an array');
-      }
-
-      questionsData = questionsData.slice(0, numberOfQuestions);
-      questionsData = shuffleOptions(questionsData);
-    } catch (parseError) {
-      console.error('Parse error:', parseError.message);
-      // Attempt to recover partial JSON
-      try {
-        const raw = claudeResponse.content;
-        const lastClose = raw.lastIndexOf('}');
-        if (lastClose !== -1) {
-          const partial = raw.substring(0, lastClose + 1);
-          const arrStart = partial.indexOf('[');
-          if (arrStart !== -1) {
-            questionsData = JSON.parse(partial.substring(arrStart) + ']');
-            questionsData = questionsData.slice(0, numberOfQuestions);
-            questionsData = shuffleOptions(questionsData);
-          } else {
-            throw parseError;
-          }
-        } else {
-          throw parseError;
-        }
-      } catch {
+      if (!Array.isArray(questionsData)) throw new Error('Response is not an array');
+    } catch {
+      console.error('JSON parse failed, using object-by-object extraction');
+      questionsData = extractQuizObjects(claudeResponse.content);
+      if (questionsData.length === 0) {
         return res.status(400).json({
           success: false,
           message: 'Failed to generate valid quiz from file. Please try again.',
-          error: parseError.message,
         });
       }
     }
+    questionsData = questionsData.slice(0, numberOfQuestions);
+    questionsData = shuffleOptions(questionsData);
 
     // Create quiz document
     const title = quizTitle || `${file.originalname} Quiz (${difficulty})`;

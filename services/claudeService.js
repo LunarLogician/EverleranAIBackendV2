@@ -2,6 +2,49 @@ const axios = require('axios');
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
+// Robustly extract MCQ objects from a potentially malformed JSON string.
+// Walks the string character-by-character tracking string/object depth so it
+// can skip over corrupted objects and keep valid ones.
+function extractMCQObjects(text) {
+  const results = [];
+  let i = 0;
+
+  // Find each top-level '{' that looks like an MCQ object
+  while (i < text.length) {
+    // Skip until we find the start of an object
+    while (i < text.length && text[i] !== '{') i++;
+    if (i >= text.length) break;
+
+    const start = i;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    // Walk to the matching closing brace
+    for (; i < text.length; i++) {
+      const ch = text[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\' && inString) { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) { i++; break; }
+      }
+    }
+
+    const candidate = text.substring(start, i);
+    try {
+      const obj = JSON.parse(candidate);
+      if (obj && (obj.question || obj.id)) results.push(obj);
+    } catch {
+      // Corrupted object — skip it
+    }
+  }
+  return results;
+}
+
 const claudeClient = axios.create({
   baseURL: CLAUDE_API_URL,
   timeout: 120000,
@@ -111,32 +154,12 @@ Return ONLY valid JSON, no markdown formatting or code blocks.`;
     try {
       questions = JSON.parse(jsonContent);
     } catch (parseError) {
-      console.error('JSON parse failed, attempting repair. Raw length:', jsonContent.length);
-      // Try to extract valid JSON array from truncated response
-      const lastValidClose = jsonContent.lastIndexOf('}');
-      if (lastValidClose !== -1) {
-        const trimmed = jsonContent.substring(0, lastValidClose + 1);
-        // Find last complete object and close the array
-        try {
-          questions = JSON.parse(trimmed + ']');
-        } catch {
-          // Try finding the last complete MCQ object boundary
-          const lastObjStart = trimmed.lastIndexOf('{"id"');
-          if (lastObjStart > 0) {
-            const beforeLastObj = trimmed.substring(0, lastObjStart).replace(/,\s*$/, '');
-            try {
-              questions = JSON.parse(beforeLastObj + ']');
-            } catch {
-              throw parseError; // Give up, throw original error
-            }
-          } else {
-            throw parseError;
-          }
-        }
-      } else {
+      console.error('JSON parse failed, attempting object-by-object extraction. Raw length:', jsonContent.length);
+      questions = extractMCQObjects(jsonContent);
+      if (questions.length === 0) {
         throw parseError;
       }
-      console.log(`JSON repair succeeded: recovered ${questions.length} questions`);
+      console.log(`Extraction recovered ${questions.length} questions`);
     }
 
     // Validate and ensure we have the required fields
