@@ -156,7 +156,8 @@ exports.generateQuiz = async (req, res, next) => {
 exports.generateQuizFromText = async (req, res, next) => {
   try {
     console.log('Received request to generate quiz from text with body:', req.body);
-  const { topic: topic0, text, numberOfQuestions = 10, difficulty = 'intermediate', quizTitle } = req.body;
+  const { topic: topic0, text, numberOfQuestions = 10, difficulty: _rawDiff = 'intermediate', quizTitle } = req.body;
+  const difficulty = (typeof _rawDiff === 'string' ? _rawDiff.toLowerCase() : 'intermediate').replace('medium', 'intermediate');
 const topic = topic0 || text;
     const userId = req.user._id;
 
@@ -228,7 +229,7 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
       },
     ];
 
-    const claudeResponse = await callClaude(claudeMessages, 'quiz_from_text', 2048);
+    const claudeResponse = await callClaude(claudeMessages, 'quiz_from_text', Math.min(Math.max(numberOfQuestions * 250, 2048), 8192));
 
     // Parse quiz from Claude response
     let questionsData = [];
@@ -313,7 +314,8 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
 // Generate quiz directly from uploaded file
 exports.generateQuizFromFile = async (req, res, next) => {
   try {
-    const { numberOfQuestions = 10, difficulty = 'intermediate', quizTitle } = req.body;
+    const { numberOfQuestions = 10, difficulty: _rawDiff2 = 'intermediate', quizTitle } = req.body;
+    const difficulty = (typeof _rawDiff2 === 'string' ? _rawDiff2.toLowerCase() : 'intermediate').replace('medium', 'intermediate');
     const userId = req.user._id;
     const file = req.file;
 
@@ -404,7 +406,8 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
       },
     ];
 
-    const claudeResponse = await callClaude(claudeMessages, 'quiz_from_file', 2048);
+    const maxTokens = Math.min(Math.max(numberOfQuestions * 250, 2048), 8192);
+    const claudeResponse = await callClaude(claudeMessages, 'quiz_from_file', maxTokens);
 
     // Parse quiz from Claude response
     let questionsData = [];
@@ -420,11 +423,30 @@ Return ONLY valid JSON array with this exact structure. DO NOT include any text 
       questionsData = shuffleOptions(questionsData);
     } catch (parseError) {
       console.error('Parse error:', parseError.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Failed to generate valid quiz from file. Please try again.',
-        error: parseError.message,
-      });
+      // Attempt to recover partial JSON
+      try {
+        const raw = claudeResponse.content;
+        const lastClose = raw.lastIndexOf('}');
+        if (lastClose !== -1) {
+          const partial = raw.substring(0, lastClose + 1);
+          const arrStart = partial.indexOf('[');
+          if (arrStart !== -1) {
+            questionsData = JSON.parse(partial.substring(arrStart) + ']');
+            questionsData = questionsData.slice(0, numberOfQuestions);
+            questionsData = shuffleOptions(questionsData);
+          } else {
+            throw parseError;
+          }
+        } else {
+          throw parseError;
+        }
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to generate valid quiz from file. Please try again.',
+          error: parseError.message,
+        });
+      }
     }
 
     // Create quiz document

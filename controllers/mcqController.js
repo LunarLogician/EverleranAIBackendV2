@@ -21,7 +21,7 @@ const getCorrectLabel = (q) => {
 // Generate MCQs from source text
 exports.generateMCQs = async (req, res, next) => {
   try {
-    const { sourceText, title, numQuestions: _rawQ = 5 } = req.body;
+    const { sourceText, title, numQuestions: _rawQ = 5, difficulty = 'medium' } = req.body;
     const userId = req.user._id;
     const numQuestions = Math.min(Math.max(parseInt(_rawQ, 10) || 5, MIN_GENERATED), MAX_GENERATED);
 
@@ -43,11 +43,12 @@ exports.generateMCQs = async (req, res, next) => {
       });
     }
 
-    console.log('🎯 Generating MCQs...', { numQuestions });
+    console.log('🎯 Generating MCQs...', { numQuestions, difficulty });
 
     const { questions, inputTokens, outputTokens } = await generateMCQsFromText(
       sourceText,
-      numQuestions
+      numQuestions,
+      difficulty
     );
 
     const mcq = new MCQ({
@@ -81,7 +82,7 @@ exports.generateMCQs = async (req, res, next) => {
 // Generate MCQs from document
 exports.generateMCQsFromDocument = async (req, res, next) => {
   try {
-    const { documentId, numQuestions: _rawQ = 5, title } = req.body;
+    const { documentId, numQuestions: _rawQ = 5, title, difficulty = 'medium' } = req.body;
     const userId = req.user._id;
     const numQuestions = Math.min(Math.max(parseInt(_rawQ, 10) || 5, MIN_GENERATED), MAX_GENERATED);
 
@@ -106,11 +107,12 @@ exports.generateMCQsFromDocument = async (req, res, next) => {
     }
 
     const docText = document.textContent.substring(0, MAX_DOC_CONTEXT);
-    console.log('🎯 Generating MCQs from document...', { documentId, numQuestions });
+    console.log('🎯 Generating MCQs from document...', { documentId, numQuestions, difficulty });
 
     const { questions, inputTokens, outputTokens } = await generateMCQsFromText(
       docText,
-      numQuestions
+      numQuestions,
+      difficulty
     );
 
     const mcq = new MCQ({
@@ -145,7 +147,7 @@ exports.generateMCQsFromDocument = async (req, res, next) => {
 // Generate MCQs from uploaded file
 exports.generateMCQsFromFile = async (req, res, next) => {
   try {
-    const { numQuestions = 5, title } = req.body;
+    const { numQuestions = 5, title, difficulty = 'medium' } = req.body;
     const userId = req.user._id;
     const file = req.file;
 
@@ -192,11 +194,12 @@ exports.generateMCQsFromFile = async (req, res, next) => {
       });
     }
 
-    console.log('🎯 Generating MCQs from file...', { numQuestions });
+    console.log('🎯 Generating MCQs from file...', { numQuestions, difficulty });
 
     const { questions, inputTokens, outputTokens } = await generateMCQsFromText(
       fileContent.substring(0, MAX_DOC_CONTEXT),
-      numQuestions
+      numQuestions,
+      difficulty
     );
 
     const mcq = new MCQ({

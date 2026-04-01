@@ -4,7 +4,7 @@ const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
 const claudeClient = axios.create({
   baseURL: CLAUDE_API_URL,
-  timeout: 30000,
+  timeout: 120000,
   headers: {
     'x-api-key': process.env.CLAUDE_API_KEY,
     'anthropic-version': '2023-06-01',
@@ -50,18 +50,26 @@ const callClaude = async (messages, useCase = 'qa', maxTokens = 1024, systemProm
 
 // Generate MCQs from text
 // numQuestions: 3-10 questions
-const generateMCQsFromText = async (sourceText, numQuestions = 5) => {
+const generateMCQsFromText = async (sourceText, numQuestions = 5, difficulty = 'medium') => {
   try {
     if (!sourceText || sourceText.trim().length === 0) {
       throw new Error('Source text cannot be empty');
     }
 
-    if (numQuestions < 3 || numQuestions > 10) {
-      numQuestions = 5; // Default to 5
-    }
+    // Clamp to 1-50 (controller already validates)
+    numQuestions = Math.min(Math.max(parseInt(numQuestions, 10) || 5, 1), 50);
+    const difficultyLevel = ['easy', 'medium', 'hard'].includes(difficulty) ? difficulty : 'medium';
 
-    const prompt = `Generate exactly ${numQuestions} multiple-choice questions from the following text. For each question:
-1. The question must be clear and test understanding of the material
+    const difficultyGuide = {
+      easy: 'straightforward questions testing basic recall and simple understanding',
+      medium: 'questions that require comprehension and application of concepts',
+      hard: 'challenging questions requiring analysis, evaluation, and deep understanding; include tricky distractors',
+    }[difficultyLevel];
+
+    const prompt = `Generate exactly ${numQuestions} multiple-choice questions (difficulty: ${difficultyLevel.toUpperCase()}) from the following text.
+Difficulty guide: ${difficultyGuide}.
+For each question:
+1. The question must be clear and test understanding of the material at the specified difficulty
 2. Provide exactly 4 options labeled A, B, C, D
 3. Mark the correct answer
 4. Provide a brief explanation for why it's correct
@@ -82,10 +90,13 @@ ${sourceText}
 
 Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
+    // Scale max_tokens based on number of questions (~250 tokens per MCQ)
+    const maxTokens = Math.min(Math.max(numQuestions * 250, 2048), 8192);
+
     const response = await callClaude(
       [{ role: 'user', content: prompt }],
       'quiz',
-      2048
+      maxTokens
     );
 
     // Parse the JSON response (handle markdown code blocks)
@@ -95,7 +106,38 @@ Return ONLY valid JSON, no markdown formatting or code blocks.`;
     } else if (jsonContent.startsWith('```')) {
       jsonContent = jsonContent.replace(/^```\n?/, '').replace(/\n?```$/, '');
     }
-    let questions = JSON.parse(jsonContent);
+
+    let questions;
+    try {
+      questions = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error('JSON parse failed, attempting repair. Raw length:', jsonContent.length);
+      // Try to extract valid JSON array from truncated response
+      const lastValidClose = jsonContent.lastIndexOf('}');
+      if (lastValidClose !== -1) {
+        const trimmed = jsonContent.substring(0, lastValidClose + 1);
+        // Find last complete object and close the array
+        try {
+          questions = JSON.parse(trimmed + ']');
+        } catch {
+          // Try finding the last complete MCQ object boundary
+          const lastObjStart = trimmed.lastIndexOf('{"id"');
+          if (lastObjStart > 0) {
+            const beforeLastObj = trimmed.substring(0, lastObjStart).replace(/,\s*$/, '');
+            try {
+              questions = JSON.parse(beforeLastObj + ']');
+            } catch {
+              throw parseError; // Give up, throw original error
+            }
+          } else {
+            throw parseError;
+          }
+        }
+      } else {
+        throw parseError;
+      }
+      console.log(`JSON repair succeeded: recovered ${questions.length} questions`);
+    }
 
     // Validate and ensure we have the required fields
     questions = questions.map((q, idx) => ({
