@@ -42,7 +42,7 @@ const requirePlan = require('../middleware/requirePlan');
 
 // ⚠️ CRITICAL: These routes MUST be defined BEFORE parameterized routes
 // POST upload - requires basic plan
-router.post('/upload', authMiddleware, requirePlan('basic'), upload.single('file'), documentController.uploadDocument);
+router.post('/upload', authMiddleware, upload.single('file'), documentController.uploadDocument);
 
 // GET list - exact path match
 router.get('/', authMiddleware, documentController.getUserDocuments);

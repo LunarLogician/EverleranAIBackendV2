@@ -15,13 +15,13 @@ const upload = multer({
 router.use(auth);
 
 // Generate exam paper from raw text
-router.post('/generate', requirePlan('pro'), examPaperController.generateExamPaper);
+router.post('/generate', examPaperController.generateExamPaper);
 
 // Generate exam paper from a previously-uploaded document
-router.post('/generate-from-document', requirePlan('pro'), examPaperController.generateExamPaperFromDocument);
+router.post('/generate-from-document', examPaperController.generateExamPaperFromDocument);
 
 // Generate exam paper from an uploaded file
-router.post('/generate-from-file', requirePlan('pro'), upload.single('file'), examPaperController.generateExamPaperFromFile);
+router.post('/generate-from-file', upload.single('file'), examPaperController.generateExamPaperFromFile);
 
 // Get all exam papers for the authenticated user
 router.get('/list', examPaperController.getExamPapers);

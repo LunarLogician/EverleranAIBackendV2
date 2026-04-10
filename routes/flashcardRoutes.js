@@ -12,10 +12,10 @@ const upload = multer({
 
 router.use(authMiddleware);
 
-// All flashcard generation requires pro plan
-router.post('/generate', requirePlan('pro'), flashcardController.generateFlashcards);
-router.post('/generate-from-text', requirePlan('pro'), flashcardController.generateFlashcardsFromText);
-router.post('/generate-from-file', requirePlan('pro'), upload.single('file'), flashcardController.generateFlashcardsFromFile);
+// All features open — token limits gate usage per plan
+router.post('/generate', flashcardController.generateFlashcards);
+router.post('/generate-from-text', flashcardController.generateFlashcardsFromText);
+router.post('/generate-from-file', upload.single('file'), flashcardController.generateFlashcardsFromFile);
 router.get('/', flashcardController.getUserFlashcards);
 router.get('/:flashcardId', flashcardController.getFlashcardSet);
 router.put('/:flashcardId/progress', flashcardController.updateFlashcardProgress);
