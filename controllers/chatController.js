@@ -153,9 +153,13 @@ exports.directChat = async (req, res, next) => {
       });
     }
 
+    const remainingTokens = usagePreflight ? (usagePreflight.tokenLimit - usagePreflight.totalTokens) : 3072;
+    // Provide a small buffer but strictly cut off output if running low.
+    const maxOutputTokens = Math.min(Math.max(remainingTokens, 50), 3072);
+
     // Call Claude API
     console.log(`\n🤖 [directChat] Calling Claude with ${featureName} mode... history=${priorHistory.length} msgs`);
-    const claudeResponse = await callClaude(claudeMessages, 'qa', 3072, claudeSystemPrompt);
+    const claudeResponse = await callClaude(claudeMessages, 'qa', maxOutputTokens, claudeSystemPrompt);
     console.log(`   Response tokens: input=${claudeResponse.inputTokens}, output=${claudeResponse.outputTokens}`);
 
     // Update usage — reuse preflight doc instead of a second DB round-trip
@@ -304,6 +308,9 @@ exports.directChatStream = async (req, res, next) => {
       });
     }
 
+    const remainingTokens = usagePreflight ? (usagePreflight.tokenLimit - usagePreflight.totalTokens) : 3072;
+    const maxOutputTokens = Math.min(Math.max(remainingTokens, 50), 3072);
+
     // — Open SSE connection —
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -319,7 +326,7 @@ exports.directChatStream = async (req, res, next) => {
     const { inputTokens, outputTokens } = await callClaudeStream(
       claudeMessages,
       'qa',
-      3072,
+      maxOutputTokens, // Apply strict cutoff
       claudeSystemPrompt,
       (text) => {
         if (aborted) return;
